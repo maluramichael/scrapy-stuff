@@ -1,0 +1,13 @@
+{% include 'categories.html' %} 
+
+{% if threads %}
+Threads:
+
+<ul>
+{% for thread in threads %}
+    <li>
+        <a href="/category/{{ thread.category_id }}/{{thread.id}}">{{ thread.title }}</a>
+    </li>
+{% endfor %}
+</ul>
+{% endif %}

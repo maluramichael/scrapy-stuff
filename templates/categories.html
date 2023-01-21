@@ -1,0 +1,11 @@
+{% if categories %}
+Categories:
+
+<ul>
+{% for category in categories %}
+    <li>
+        <a href="/category/{{ category.id }}">{{ category.title }}</a>
+    </li>
+{% endfor %}
+</ul>
+{% endif %}
