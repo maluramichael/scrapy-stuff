@@ -1,0 +1,61 @@
+<script>
+    const init = () => {
+        const searchElement = document.getElementById('search');
+        const resultElement = document.getElementById('results');
+
+        const debounce = function (fn, delay) {
+            let timer;
+            return function () {
+                const context = this;
+                const args = arguments;
+                clearTimeout(timer);
+                timer = setTimeout(() => {
+                    fn.apply(context, args);
+                }, delay);
+            }
+        }
+
+        const debouncedInputHandler = debounce(function inputHandler(e) {
+            fetch(`/search?q=${e.target.value}`)
+                .then(response => response.json())
+                .then(data =>{
+                    resultElement.innerHTML = '';
+                    data.hits.hits.forEach(item => {
+                        const li = document.createElement('li');
+                        li.innerHTML = `<a href="/category/${item._source.category_id}/${item._source.thread_id}#${item._source.post_id}"><h3>${item._source.title}</h3></a>`;
+                        li.innerHTML += item.highlight.content.join('<br/>');
+
+                        resultElement.appendChild(li);
+                    })
+                })
+        }, 100);
+
+        searchElement.addEventListener('input', debouncedInputHandler);
+    }
+
+    document.onreadystatechange = function () {
+        if (document.readyState === 'complete') {
+            init();
+        }
+    }
+
+</script>
+
+<style>
+    #results {
+        list-style: none;
+        padding: 0;
+    }
+
+    #results li {
+        padding: 10px;
+        border-bottom: 1px solid #ccc;
+    }
+</style>
+
+<input type="text" id="search" placeholder="Search"/>
+
+<ul id="results">
+
+</ul>
+

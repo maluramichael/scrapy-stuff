@@ -2,12 +2,9 @@
 #
 # Don't forget to add your pipeline to the ITEM_PIPELINES setting
 # See: https://docs.scrapy.org/en/latest/topics/item-pipeline.html
-
-
+from sqlalchemy import func
 # useful for handling different item types with a single interface
-from itemadapter import ItemAdapter
 from sqlalchemy.orm import sessionmaker
-import sqlite3
 import pytz
 
 from phpbbscrapy.items import PostItem, ThreadItem, CategoryItem
@@ -50,6 +47,7 @@ class PostPipeline:
             else:
                 session.close()
                 raise DropItem("Duplicate item found: %s" % item)
+
 
 class ThreadPipeline:
     def __init__(self) -> None:
@@ -95,6 +93,7 @@ class ThreadPipeline:
                 session.close()
                 raise DropItem("Duplicate item found: %s" % item)
 
+
 class CategoryPipeline:
     def __init__(self) -> None:
         engine = db_connect()
@@ -127,7 +126,7 @@ class CategoryPipeline:
             found_latest_post = session.query(Post).filter_by(thread_id=thread_id).order_by(Post.date.desc()).first()
             category_last_post_date = item["last_post_date"].replace(tzinfo=pytz.UTC)
             database_category_last_post_date = found_latest_post.date.replace(tzinfo=pytz.UTC)
-       
+
             if database_category_last_post_date < category_last_post_date:
                 found.last_post_date = category_last_post_date
                 found.number_of_posts = item["number_of_posts"]
@@ -138,19 +137,19 @@ class CategoryPipeline:
                 session.close()
                 raise DropItem("Duplicate item found: %s" % item)
 
+
 def get_post_count_in_category(sessionmaker, category_id):
     with sessionmaker() as session:
         child_categories = session.query(Category).filter_by(parent_id=category_id)
         post_count_in_child_categories = 0
         for child_category in child_categories:
             post_count_in_child_categories += get_post_count_in_category(sessionmaker, child_category.id)
-            
-        post_count_in_threads = 0
-        threads = session.query(Thread).filter_by(category_id=category_id)
-        for thread in threads:
-            post_count_in_threads += session.query(Post).filter_by(thread_id=thread.id).count()
+
+        thread_post_groups = session.query(Post.id, func.count(Post.id)).join(Thread).filter_by(category_id=category_id).group_by(Post.thread_id).all()
+        post_count_in_threads = sum([e[1] for e in thread_post_groups])
 
         return post_count_in_child_categories + post_count_in_threads
+
 
 def get_post_count_in_thread(sessionmaker, thread):
     with sessionmaker() as session:

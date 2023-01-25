@@ -1,17 +1,23 @@
-{% include 'categories.html' %} 
+{% include 'header.html' %}
+{% include 'categories.html' %}
 
 Thread: {{thread.title}}
+<br>
 
 {% if posts %}
-posts:
 
-<ul>
-{% for post in posts %}
-    <li>
-        <p>
-            {{ post.content }}
-        </p>
-    </li>
-{% endfor %}
-</ul>
+    {% for page in pages %}
+        <a href="?page={{ page }}">{{ page }}</a>
+    {% endfor %}
+
+
+    <ul>
+    {% for post in posts %}
+        <li>
+            <p>
+                {{ post.content }}
+            </p>
+        </li>
+    {% endfor %}
+    </ul>
 {% endif %}

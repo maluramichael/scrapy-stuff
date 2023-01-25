@@ -2,13 +2,10 @@ import scrapy
 import re
 from bs4 import BeautifulSoup
 import datetime
-import random
-from tqdm import tqdm, trange
 from phpbbscrapy.items import CategoryItem, PostItem, ThreadItem
 from scrapy.exceptions import CloseSpider
 from phpbbscrapy.models import db_connect, Category, Thread, Post
 from sqlalchemy.orm import sessionmaker
-import sqlite3
 import pytz
 
 from phpbbscrapy.pipelines import get_post_count_in_category, get_post_count_in_thread
@@ -30,7 +27,6 @@ class PHPBBSpider(scrapy.Spider):
 
         engine = db_connect()
         self.session = sessionmaker(bind=engine)
-
 
     def parse(self, response):
         return self.parse_forums(response, None)
