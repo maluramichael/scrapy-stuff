@@ -12,16 +12,14 @@ BOT_NAME = 'phpbbscrapy'
 SPIDER_MODULES = ['phpbbscrapy.spiders']
 NEWSPIDER_MODULE = 'phpbbscrapy.spiders'
 
-CONNECTION_STRING = "{drivername}:///{db_name}".format(
-     drivername="sqlite",
-     db_name="phpbb.db",
-)
+# CONNECTION_STRING = 'sqlite:///phpbbscrapy.db'
+CONNECTION_STRING = 'mysql+pymysql://root:root@192.168.2.2:3306/scrapy'
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
-#USER_AGENT = 'phpbbscrapy (+http://www.yourdomain.com)'
+USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:108.0) Gecko/20100101 Firefox/108.0'
 
 # Obey robots.txt rules
-ROBOTSTXT_OBEY = True
+ROBOTSTXT_OBEY = False
 
 # Configure maximum concurrent requests performed by Scrapy (default: 16)
 CONCURRENT_REQUESTS = 1
@@ -29,7 +27,6 @@ CONCURRENT_REQUESTS = 1
 # Configure a delay for requests for the same website (default: 0)
 # See https://docs.scrapy.org/en/latest/topics/settings.html#download-delay
 # See also autothrottle settings and docs
-# DOWNLOAD_DELAY = 1
 # The download delay setting will honor only one of:
 #CONCURRENT_REQUESTS_PER_DOMAIN = 16
 #CONCURRENT_REQUESTS_PER_IP = 16
@@ -68,6 +65,7 @@ CONCURRENT_REQUESTS = 1
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
    'phpbbscrapy.pipelines.DatabasePipeline': 1,
+   'phpbbscrapy.pipelines.BoardPipeline': 50,
    'phpbbscrapy.pipelines.CategoryPipeline': 100,
    'phpbbscrapy.pipelines.ThreadPipeline': 200,
    'phpbbscrapy.pipelines.PostPipeline': 300,
@@ -83,8 +81,8 @@ AUTOTHROTTLE_TARGET_CONCURRENCY = 1
 
 # Enable and configure HTTP caching (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html#httpcache-middleware-settings
-HTTPCACHE_ENABLED = False
-HTTPCACHE_EXPIRATION_SECS = 60 * 60 * 24 * 7
+HTTPCACHE_ENABLED = True
+HTTPCACHE_EXPIRATION_SECS = 60 * 60 * 10
 HTTPCACHE_DIR = 'httpcache'
 HTTPCACHE_IGNORE_HTTP_CODES = [500, 502, 503, 504, 400, 403, 404, 408]
 HTTPCACHE_STORAGE = 'scrapy.extensions.httpcache.FilesystemCacheStorage'

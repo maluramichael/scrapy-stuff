@@ -2,9 +2,9 @@ import scrapy
 import re
 from bs4 import BeautifulSoup
 import datetime
-from phpbbscrapy.items import CategoryItem, PostItem, ThreadItem
+from phpbbscrapy.items import CategoryItem, PostItem, ThreadItem, BoardItem
 from scrapy.exceptions import CloseSpider
-from phpbbscrapy.models import db_connect, Category, Thread, Post
+from phpbbscrapy.models import db_connect
 from sqlalchemy.orm import sessionmaker
 import pytz
 
@@ -13,9 +13,6 @@ from phpbbscrapy.pipelines import get_post_count_in_category, get_post_count_in_
 
 class PHPBBSpider(scrapy.Spider):
     name = 'phpBB'
-    allowed_domains = ['zfx.info']
-    base_url = 'https://zfx.info'
-    start_urls = ['https://zfx.info']
     post_body_xpath = '//div[@class="postbody"]'
     author_xpath = './/p[contains(@class, "author")]'
     post_count_xpath = 'dd[@class="profile-posts" or not(@class)]//a/text()'
@@ -28,8 +25,12 @@ class PHPBBSpider(scrapy.Spider):
         engine = db_connect()
         self.session = sessionmaker(bind=engine)
 
-    def parse(self, response):
-        return self.parse_forums(response, None)
+    def parse(self, response, **kwargs):
+        board = BoardItem()
+        board['name'] = self.name
+        yield board
+
+        yield from self.parse_forums(response, None)
 
     def parse_forums(self, response, parent_category):
         for forum_list in response.xpath('//ul[@class="topiclist forums"]'):
@@ -53,6 +54,8 @@ class PHPBBSpider(scrapy.Spider):
                     category['parent_id'] = parent_category['id']
                 else:
                     category['parent_id'] = None
+
+                category['board_name'] = self.name
 
                 database_post_count_in_category = get_post_count_in_category(self.session, category['id'])
 

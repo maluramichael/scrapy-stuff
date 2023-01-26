@@ -2,13 +2,15 @@
 #
 # Don't forget to add your pipeline to the ITEM_PIPELINES setting
 # See: https://docs.scrapy.org/en/latest/topics/item-pipeline.html
+import datetime
+
 from sqlalchemy import func
 # useful for handling different item types with a single interface
 from sqlalchemy.orm import sessionmaker
 import pytz
 
-from phpbbscrapy.items import PostItem, ThreadItem, CategoryItem
-from phpbbscrapy.models import create_table, db_connect, Category, Thread, Post
+from phpbbscrapy.items import PostItem, ThreadItem, CategoryItem, BoardItem
+from phpbbscrapy.models import create_table, db_connect, Category, Thread, Post, Board
 from scrapy.exceptions import DropItem
 
 
@@ -20,6 +22,31 @@ class DatabasePipeline:
         """
         engine = db_connect()
         create_table(engine)
+
+
+class BoardPipeline:
+    def __init__(self) -> None:
+        engine = db_connect()
+        self.session = sessionmaker(bind=engine)
+
+    def process_item(self, item, spider):
+        if isinstance(item, BoardItem):
+            self.store_db(item)
+
+        return item
+
+    def store_db(self, item):
+        with self.session() as session:
+            found = session.query(Board).filter_by(name=item['name']).first()
+
+            if not found:
+                session.add(Board(**item))
+                print("Added board with name: " + item['name'])
+                session.commit()
+                session.close()
+            else:
+                session.close()
+                raise DropItem("Duplicate item found: %s" % item)
 
 
 class PostPipeline:
@@ -54,7 +81,8 @@ class ThreadPipeline:
         engine = db_connect()
         self.session = sessionmaker(bind=engine)
         session = self.session()
-        self.threads = [(e[0], e[1].replace(tzinfo=pytz.UTC)) for e in session.query(Thread.id, Thread.last_post_date).all()]
+        self.threads = [(e[0], e[1].replace(tzinfo=pytz.UTC)) for e in
+                        session.query(Thread.id, Thread.last_post_date).all()]
         session.close()
 
     def process_item(self, item, spider):
@@ -121,7 +149,8 @@ class CategoryPipeline:
             raise DropItem("Duplicate item found: %s" % item)
 
         with self.session() as session:
-            found_latest_thread = session.query(Thread).filter_by(category_id=category_id).order_by(Thread.last_post_date.desc()).first()
+            found_latest_thread = session.query(Thread).filter_by(category_id=category_id).order_by(
+                Thread.last_post_date.desc()).first()
             thread_id = found_latest_thread.id
             found_latest_post = session.query(Post).filter_by(thread_id=thread_id).order_by(Post.date.desc()).first()
             category_last_post_date = item["last_post_date"].replace(tzinfo=pytz.UTC)
@@ -145,10 +174,47 @@ def get_post_count_in_category(sessionmaker, category_id):
         for child_category in child_categories:
             post_count_in_child_categories += get_post_count_in_category(sessionmaker, child_category.id)
 
-        thread_post_groups = session.query(Post.id, func.count(Post.id)).join(Thread).filter_by(category_id=category_id).group_by(Post.thread_id).all()
+        thread_post_groups = session.query(Post.id, func.count(Post.id)).join(Thread).filter_by(
+            category_id=category_id).group_by(Post.thread_id).all()
         post_count_in_threads = sum([e[1] for e in thread_post_groups])
 
         return post_count_in_child_categories + post_count_in_threads
+
+
+def get_last_post_date_in_category(sessionmaker, category_id):
+    with sessionmaker() as session:
+        child_categories = session.query(Category).filter_by(parent_id=category_id)
+        last_post_date = datetime.datetime(1970, 1, 1, 0, 0, 0, 0, tzinfo=pytz.UTC)
+
+        for child_category in child_categories:
+            child_category_post_date = get_last_post_date_in_category(sessionmaker, child_category.id)
+
+            if child_category_post_date > last_post_date:
+                last_post_date = child_category_post_date
+
+        category_post = session.query(Post.date).join(Thread).filter_by(category_id=category_id).order_by(Post.date.desc()).first()
+
+        if category_post:
+            category_post_date = category_post[0].replace(tzinfo=pytz.UTC)
+
+            if category_post_date > last_post_date:
+                last_post_date = category_post_date
+
+        return last_post_date
+
+
+def get_last_post_datein_thread(sessionmaker, thread_id):
+    with sessionmaker() as session:
+        last_post_date = datetime.datetime(1970, 1, 1, 0, 0, 0, 0, tzinfo=pytz.UTC)
+        post = session.query(Post.date).filter_by(thread_id=thread_id).order_by(Post.date.desc()).first()
+
+        if post:
+            post_date = post[0].replace(tzinfo=pytz.UTC)
+
+            if post_date > last_post_date:
+                last_post_date = post_date
+
+        return last_post_date
 
 
 def get_post_count_in_thread(sessionmaker, thread):

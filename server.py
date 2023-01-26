@@ -1,7 +1,11 @@
+import datetime
+from datetime import time
+
 from flask import (
     Flask,
     render_template, request, Response
 )
+from flask_cors import CORS, cross_origin
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from scrapy.utils.project import get_project_settings
@@ -14,6 +18,8 @@ Session = sessionmaker(bind=engine)
 
 # Create the application instance
 app = Flask(__name__, template_folder="templates")
+cors = CORS(app)
+app.config['CORS_HEADERS'] = 'Content-Type'
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 
 
@@ -54,20 +60,39 @@ def posts(category_id, thread_id):
 
 
 @app.route('/search', methods=['GET'])
+@cross_origin()
 def search_posts():
     query = request.args.get('q')
     if not query:
-        return Response('No query', status=400)
+        return []
+
+    ranges = []
+
+    for i in range(1, 15, 3):
+        now = datetime.datetime.now()
+        ranges.append({
+            "range": {
+                "date": {
+                    "gte": (now - datetime.timedelta(days=i*30)).isoformat(),
+                    "boost": 15 - i
+                }
+            }
+        })
 
     data = opensearch.search(
         index="posts",
         body={
             "query": {
-                "match": {
-                    "content": {
-                        "query": query,
-                        "operator": "AND"
-                    }
+                "bool": {
+                    "must": {
+                        "match": {
+                            "content": {
+                                "query": query,
+                                "operator": "AND"
+                            }
+                        }
+                    },
+                    "should": ranges
                 }
             },
             "highlight": {

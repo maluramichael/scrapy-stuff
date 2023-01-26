@@ -6,6 +6,10 @@
 import scrapy
 
 
+class BoardItem(scrapy.Item):
+    name = scrapy.Field()
+
+
 class CategoryItem(scrapy.Item):
     id = scrapy.Field()
     title = scrapy.Field()
@@ -14,6 +18,8 @@ class CategoryItem(scrapy.Item):
     number_of_posts = scrapy.Field()
     last_post_date = scrapy.Field()
     url = scrapy.Field()
+    board_name = scrapy.Field()
+
 
 class ThreadItem(scrapy.Item):
     id = scrapy.Field()
@@ -24,6 +30,7 @@ class ThreadItem(scrapy.Item):
     number_of_posts = scrapy.Field()
     last_post_date = scrapy.Field()
     url = scrapy.Field()
+
 
 class PostItem(scrapy.Item):
     id = scrapy.Field()
