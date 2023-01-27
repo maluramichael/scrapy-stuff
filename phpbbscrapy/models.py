@@ -27,7 +27,7 @@ class Category(Base):
     id = Column(Integer, primary_key=True, autoincrement=False)
     title = Column(String(250), nullable=False)
     description = Column(Text(), nullable=False, default='')
-    url = Column(String(250), nullable=False)
+    url = Column(Text(4294000000), nullable=False)
     parent_id = Column(Integer, ForeignKey('category.id'))
     parent = relationship('Category', remote_side=[id])
     board_name = Column(String(50), ForeignKey('board.name'), primary_key=True)
@@ -46,7 +46,7 @@ class Thread(Base):
     created_at = Column(DateTime(timezone=True), nullable=False)
     number_of_posts = Column(Integer, nullable=False)
     last_post_date = Column(DateTime(timezone=True), nullable=False)
-    url = Column(String(250), nullable=False)
+    url = Column(Text(4294000000), nullable=False)
 
 
 class Post(Base):
@@ -55,6 +55,6 @@ class Post(Base):
     content = Column(Text(4294000000), nullable=False, default='')
     author = Column(String(250), nullable=False)
     date = Column(DateTime(timezone=True), nullable=False)
-    url = Column(String(250), nullable=False)
+    url = Column(Text(4294000000), nullable=False)
     thread_id = Column(Integer, ForeignKey('thread.id'), primary_key=True)
     thread = relationship(Thread)

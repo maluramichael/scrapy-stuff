@@ -85,6 +85,8 @@ class WBBSpider(scrapy.Spider):
 
             post_date = datetime.datetime.now() - datetime.timedelta(days=1)
             post_date = post_date.replace(hour=int(hour), minute=int(minute))
+        elif "Von" in post_date_string:
+            post_date = datetime.datetime.min
         else:
             post_date = datetime.datetime.strptime(post_date_string, '%d.%m.%Y, %H:%M')
 
