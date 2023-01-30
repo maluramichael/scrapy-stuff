@@ -12,11 +12,15 @@ def handle_iso9660(absolute_file_path, doc):
             files.append(dirname)
             for file in filelist:
                 files.append(iso_path + file)
+
     except Exception as e:
-        pass
+        iso.close()
+
+        return {
+            'error': str(e)
+        }
 
     iso.close()
-
     return {
         'files': files
     }

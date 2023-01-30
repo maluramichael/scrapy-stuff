@@ -10,14 +10,23 @@ from tqdm import tqdm
 from handler.image import handle_image
 from handler.iso9660 import handle_iso9660
 from handler.text import handle_text
+from handler.video import handle_video
+from handler.windowsExecutable import handle_windows_executable
 from handler.zip import handle_zip
 from opensearch import opensearch
 
-ignored_files = [r"\.DS_Store", r"\._.*", r"Thumbs\.db"]
-ignored_dirs = [r".*\.git", r".*venv", r".*\.dtrash", r".*\.idea", r".*\.vscode"]
+ignored_files = [r"\.DS_Store", r"\._.*", r"Thumbs\.db", r"aquota\.user", r"aquota\.group", r"lost\+found", r"desktop\.ini"]
+ignored_dirs = [r".*\.git", r".*venv", r".*\.dtrash", r".*\.idea", r".*\.vscode", r".*/pr0gram"]
+ignored_mime_types = ['application/octet-stream', 'application/x-bittorrent']
 file_filter_pattern = "(" + ")|(".join(ignored_files) + ")"
 dir_filter_pattern = "(" + ")|(".join(ignored_dirs) + ")"
 start_dir = "/Volumes/tank/isos"
+
+# parse --reindex parameter
+reindex_existing_files = False
+
+if '--reindex' in sys.argv:
+    reindex_existing_files = True
 
 # parse first argument as start directory
 if len(sys.argv) > 1:
@@ -62,8 +71,11 @@ def main():
         if re.match(dir_filter_pattern, dirpath):
             continue
 
-        # get existing file list from opensearch
-        existing_files = get_existing_files_from_opensearch(dirpath.replace('/Volumes', ''))
+        existing_files = []
+
+        if not reindex_existing_files:
+            existing_files = get_existing_files_from_opensearch(dirpath.replace('/Volumes', ''))
+
         filtered_files = [filename for filename in filenames if not re.match(file_filter_pattern, filename) and filename not in existing_files]
         docs = []
 
@@ -73,10 +85,10 @@ def main():
 
         print(f"Processing {len(filtered_files)} in {dirpath}")
 
-        for filename in filtered_files:
+        for filename in tqdm(filtered_files, desc=dirname, unit="files", position=0, leave=True):
             absolute_file_path = os.path.join(dirpath, filename)
             id = hashlib.sha256(absolute_file_path.encode('utf-8')).hexdigest()
-            mime = magic.from_file(absolute_file_path, mime=True)
+            mime: str = magic.from_file(absolute_file_path, mime=True)
             stats = os.stat(absolute_file_path)
 
             doc = {
@@ -94,16 +106,35 @@ def main():
 
             meta_data = None
 
+            if mime in ignored_mime_types:
+                continue
+
             if mime.startswith('image/'):
                 meta_data = handle_image(absolute_file_path, doc)
-            elif mime.startswith('text/'):
+            elif mime.startswith('text/') or mime in ['application/x-wine-extension-ini']:
                 meta_data = handle_text(absolute_file_path, doc)
+            elif mime.startswith('video/'):
+                meta_data = handle_video(absolute_file_path, doc)
             elif mime == 'application/x-iso9660-image':
                 meta_data = handle_iso9660(absolute_file_path, doc)
             elif mime == 'application/zip':
                 meta_data = handle_zip(absolute_file_path, doc)
+            elif mime == 'application/vnd.microsoft.portable-executable':
+                meta_data = handle_windows_executable(absolute_file_path, doc)
+            elif mime == 'inode/x-empty':
+                meta_data = {'skip': 'empty file'}
             else:
                 unknown_mime_types.add(mime)
+                continue
+
+            if meta_data is None:
+                continue
+
+            if 'error' in meta_data:
+                print(f"Error while processing {absolute_file_path}: {meta_data['error']}")
+            elif 'skip' in meta_data:
+                print(f"Skip further processing of the file. But still indexing it. {absolute_file_path}")
+
 
             doc['meta_data'] = meta_data
             docs.append({

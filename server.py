@@ -4,6 +4,7 @@ import os
 from datetime import time
 import PIL
 import magic
+import opensearchpy
 from PIL import Image
 from flask import (
     Flask,
@@ -68,11 +69,15 @@ def posts(category_id, thread_id):
 def images(path):
     decode_base64_string = lambda s: base64.b64decode(s.encode('utf-8')).decode('utf-8')
     decoded_path = decode_base64_string(path)
-    thumbnail_path = f"thumbnails/{path}.jpg"
     local_path = f"/Volumes{decoded_path}"
 
     if not os.path.exists(local_path):
         return {}
+
+    if local_path.lower().endswith('.gif'):
+        return Response(open(local_path, 'rb').read(), mimetype="image/gif")
+
+    thumbnail_path = f"thumbnails/{path}.jpg"
 
     try:
         if not os.path.exists(thumbnail_path):
@@ -142,11 +147,9 @@ def search_posts():
             "query": {
                 "bool": {
                     "must": {
-                        "multi_match": {
+                        "query_string": {
                             "query": query,
-                            "fields": ["content", "title", "filename", "path", "meta_data"],
-                            "operator": "AND"
-                        },
+                        }
                     },
                     "should": [
                         {
@@ -180,5 +183,36 @@ def search_posts():
         }
     )
     data['page'] = page
+
+    return data
+
+
+@app.route('/aggs', methods=['GET'])
+@cross_origin()
+def aggs():
+    field = request.args.get('field')
+    query = request.args.get('q')
+
+    if not field or not query:
+        return []
+
+    data = opensearch.search(
+        index=["posts", "fs"],
+        body={
+            "size": 0,
+            "query": {
+                "query_string": {
+                    "query": query,
+                },
+            },
+            "aggs": {
+                "agg": {
+                    "terms": {
+                        "field": field
+                    }
+                }
+            }
+        }
+    )
 
     return data

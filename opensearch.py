@@ -13,14 +13,13 @@ opensearch = OpenSearch(
     ssl_show_warn=False,
 )
 
-def create_index():
-    response = opensearch.indices.create('posts', body={
-        'settings': {
-            'index': {
-                'number_of_shards': 4
-            }
-        }
-    })
-    print('\nCreating index:')
-    print(response)
 
+def create_index():
+    if not opensearch.indices.exists('posts'):
+        opensearch.indices.create('posts', body={
+            'settings': {
+                'index': {
+                    'number_of_shards': 1
+                }
+            }
+        })

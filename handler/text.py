@@ -4,13 +4,14 @@ import magic
 def handle_text(absolute_file_path, doc):
     with open(absolute_file_path, 'r') as f:
         size = doc['stat']['size']
-        encoding = 'binary'
 
         try:
             m = magic.Magic(mime_encoding=True)
             encoding = m.from_buffer(f.read(1024))
         except Exception as e:
-            pass
+            return {
+                'error': str(e)
+            }
 
         result = {
             'encoding': encoding,
@@ -18,7 +19,9 @@ def handle_text(absolute_file_path, doc):
         }
 
         if encoding == 'binary':
-            return result
+            return {
+                'skip': 'binary'
+            }
 
         f.seek(0)
 
@@ -29,5 +32,9 @@ def handle_text(absolute_file_path, doc):
             else:
                 result['big_file'] = False
                 result['content'] = f.read()
-        except Exception as e:
+
             return result
+        except Exception as e:
+            return {
+                'error': str(e)
+            }
