@@ -10,8 +10,17 @@ class BoardItem(scrapy.Item):
     name = scrapy.Field()
 
 
+class PostAttachmentItem(scrapy.Item):
+    board_name = scrapy.Field()
+    post_id = scrapy.Field()
+    thread_id = scrapy.Field()
+    category_id = scrapy.Field()
+    url = scrapy.Field()
+    filename = scrapy.Field()
+
+
 class CategoryItem(scrapy.Item):
-    id = scrapy.Field()
+    category_id = scrapy.Field()
     title = scrapy.Field()
     description = scrapy.Field()
     parent_id = scrapy.Field()
@@ -22,7 +31,7 @@ class CategoryItem(scrapy.Item):
 
 
 class ThreadItem(scrapy.Item):
-    id = scrapy.Field()
+    thread_id = scrapy.Field()
     title = scrapy.Field()
     category_id = scrapy.Field()
     author = scrapy.Field()
@@ -30,15 +39,22 @@ class ThreadItem(scrapy.Item):
     number_of_posts = scrapy.Field()
     last_post_date = scrapy.Field()
     url = scrapy.Field()
+    board_name = scrapy.Field()
 
 
 class PostItem(scrapy.Item):
-    id = scrapy.Field()
+    post_id = scrapy.Field()
     thread_id = scrapy.Field()
+    category_id = scrapy.Field()
     content = scrapy.Field()
     author = scrapy.Field()
     date = scrapy.Field()
     url = scrapy.Field()
+    board_name = scrapy.Field()
+    files = scrapy.Field()
+    images = scrapy.Field()
+    file_urls = scrapy.Field()
+    image_urls = scrapy.Field()
 
     def valid(self):
         if not self.get('thread_id'):

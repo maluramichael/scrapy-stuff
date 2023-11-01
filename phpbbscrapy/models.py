@@ -24,13 +24,14 @@ class Board(Base):
 
 class Category(Base):
     __tablename__ = 'category'
-    id = Column(Integer, primary_key=True, autoincrement=False)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    category_id = Column(Integer, nullable=False)
     title = Column(String(250), nullable=False)
     description = Column(Text(), nullable=False, default='')
     url = Column(Text(4294000000), nullable=False)
     parent_id = Column(Integer, ForeignKey('category.id'))
     parent = relationship('Category', remote_side=[id])
-    board_name = Column(String(50), ForeignKey('board.name'), primary_key=True)
+    board_name = Column(String(50), ForeignKey('board.name'))
     board = relationship(Board)
     number_of_posts = Column(Integer, nullable=False, default=0)
     last_post_date = Column(DateTime(timezone=True), nullable=False)
@@ -38,9 +39,10 @@ class Category(Base):
 
 class Thread(Base):
     __tablename__ = 'thread'
-    id = Column(Integer, primary_key=True, autoincrement=False)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    thread_id = Column(Integer, nullable=False)
     title = Column(String(250), nullable=False)
-    category_id = Column(Integer, ForeignKey('category.id'), primary_key=True )
+    category_id = Column(Integer, ForeignKey('category.id'))
     category = relationship(Category)
     author = Column(String(250), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False)
@@ -51,10 +53,11 @@ class Thread(Base):
 
 class Post(Base):
     __tablename__ = 'post'
-    id = Column(Integer, primary_key=True, autoincrement=False)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    post_id = Column(Integer, nullable=False)
     content = Column(Text(4294000000), nullable=False, default='')
     author = Column(String(250), nullable=False)
     date = Column(DateTime(timezone=True), nullable=False)
     url = Column(Text(4294000000), nullable=False)
-    thread_id = Column(Integer, ForeignKey('thread.id'), primary_key=True)
+    thread_id = Column(Integer, ForeignKey('thread.id'))
     thread = relationship(Thread)

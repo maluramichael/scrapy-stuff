@@ -1,10 +1,12 @@
+import random
+
 import scrapy
 import re
 from bs4 import BeautifulSoup
 import datetime
 from phpbbscrapy.items import CategoryItem, PostItem, ThreadItem, BoardItem
 from scrapy.exceptions import CloseSpider
-from phpbbscrapy.models import db_connect, Category
+from phpbbscrapy.models import db_connect, Category, Post
 from sqlalchemy.orm import sessionmaker
 import pytz
 
@@ -25,6 +27,7 @@ class WBBSpider(scrapy.Spider):
 
         engine = db_connect()
         self.session = sessionmaker(bind=engine)
+        self.post_thread_ids = self.get_post_thread_ids()
 
     def parse(self, response, **kwargs):
         board = BoardItem()
@@ -39,7 +42,10 @@ class WBBSpider(scrapy.Spider):
         return cleaned
 
     def parse_forums(self, response, parent_category):
-        for forum in response.xpath('//li[contains(@class, "category")]//ul//li'):
+        forums = response.xpath('//li[contains(@class, "category")]//ul//li')
+        random.shuffle(forums)
+
+        for forum in forums:
             category = CategoryItem()
             category['title'] = forum.xpath('.//h4[@class="boardTitle"]//a//text()').get()
             category['url'] = self.clean_url(forum.xpath('.//h4[@class="boardTitle"]//a//@href').get())
@@ -63,10 +69,10 @@ class WBBSpider(scrapy.Spider):
 
             category['board_name'] = self.name
 
-            database_last_post_date_in_category = get_last_post_date_in_category(self.session, category['id'])
-
-            if database_last_post_date_in_category and database_last_post_date_in_category >= last_post_date:
-                continue
+            # database_last_post_date_in_category = get_last_post_date_in_category(self.session, category['id'])
+            #
+            # if database_last_post_date_in_category and database_last_post_date_in_category >= last_post_date:
+            #     continue
 
             yield category
             yield scrapy.Request(category['url'], callback=self.parse_threads, meta={'category': category})
@@ -98,8 +104,10 @@ class WBBSpider(scrapy.Spider):
         category = response.meta['category']
 
         yield from self.parse_forums(response, category)
-
-        for topic in response.xpath('//tr[starts-with(@id,"threadRow")]'):
+        topics = response.xpath('//tr[starts-with(@id,"threadRow")]')
+        random.shuffle(topics)
+        print("")
+        for topic in topics:
             thread = ThreadItem()
             thread['title'] = topic.xpath('./td[2]/div[1]/p/a/text()').get()
             thread['url'] = topic.xpath('./td[2]/div[1]/p/a/@href').get()
@@ -157,10 +165,20 @@ class WBBSpider(scrapy.Spider):
 
             database_last_post_datein_thread = get_last_post_datein_thread(self.session, thread['id'])
 
-            if database_last_post_datein_thread and database_last_post_datein_thread >= last_post_date:
+            board_name =self.name
+            category_id = category['id']
+            thread_id = thread['id']
+            number_of_posts_in_thread = get_post_count_in_thread(self.session, board_name, category_id, thread_id)
+            # if database_last_post_datein_thread and database_last_post_datein_thread >= last_post_date:
+            #     continue
+
+            if number_of_posts_in_thread == thread['number_of_posts']:
+                print("s", end="")
                 continue
 
-            print(f"Processing new posts in thread {category['title']} > {thread['title']} ({thread['url']})")
+            # print(f"Processing new posts in thread {category['title']} > {thread['title']} ({thread['url']})")
+
+            print("T", end="")
 
             yield thread
             yield scrapy.Request(thread['url'], callback=self.parse_posts, meta={'category': category, 'thread': thread})
@@ -174,7 +192,7 @@ class WBBSpider(scrapy.Spider):
     def parse_posts(self, response):
         category = response.meta['category']
         thread = response.meta['thread']
-
+        print("")
         for post in response.xpath('//div[starts-with(@id,"postRow")]'):
             post_item = PostItem()
             post_text = post.xpath('./div/div[2]/div/div[2]/div').get()
@@ -189,6 +207,7 @@ class WBBSpider(scrapy.Spider):
                 author_string = 'Anonymous'
 
             if author_string is None:
+                print("Z", end="")
                 raise Exception(f"Could not find author in post")
 
             post_item['author'] = author_string
@@ -198,14 +217,24 @@ class WBBSpider(scrapy.Spider):
             post_item['url'] = post.xpath('./div/div[2]/div/div[1]/p/a/@href').get()
             id_match = re.match(".+/([0-9]+)#post[0-9]+$", post_item['url'])
             if not id_match:
+                print("X", end="")
                 continue
 
             post_item['id'] = int(id_match.group(1))
             post_item['thread_id'] = thread['id']
 
             if not post_item.valid():
+                print("V", end="")
                 raise CloseSpider('Post not valid')
 
+            post_id = post_item['id']
+            thread_id = post_item['thread_id']
+
+            if thread_id in self.post_thread_ids and post_id in self.post_thread_ids[thread_id]:
+                print("D", end="")
+                continue
+
+            print(".", end="")
             # post_profile = post.xpath('./preceding-sibling::dl')
             # author_post_count = post_profile.xpath(self.post_count_xpath).get()
             # post_quotes = self.clean_quote(post_text)
@@ -238,3 +267,20 @@ class WBBSpider(scrapy.Spider):
         result_text = re.sub(r' +', r' ', soup_get_text).strip()
 
         return str(list(soup.html.body.children)).strip()
+
+    def get_post_thread_ids(self):
+        with self.session() as session:
+            result = {}
+            for t in session.query(Post.thread_id, Post.id).all():
+                thread_id = t[0]
+                post_id = t[1]
+
+                if thread_id is None or post_id is None:
+                    continue
+
+                if thread_id not in result:
+                    result[thread_id] = []
+
+                result[thread_id].append(post_id)
+
+            return result
