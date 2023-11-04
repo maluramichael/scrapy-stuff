@@ -6,3 +6,4 @@ class ZFXSpider(PHPBBSpider):
     allowed_domains = ['zfx.info']
     base_url = 'https://zfx.info'
     start_urls = ['https://zfx.info']
+    login_required = False

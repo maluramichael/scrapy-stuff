@@ -1,3 +1,4 @@
+import random
 import scrapy
 import re
 from bs4 import BeautifulSoup
@@ -8,10 +9,23 @@ from phpbbscrapy.models import db_connect
 from sqlalchemy.orm import sessionmaker
 import pytz
 from scrapy.utils.project import get_project_settings
-# from tabulate import tabulate
-from phpbbscrapy.pipelines import get_post_count_in_category, get_post_count_in_thread, get_category_from_db
+from tabulate import tabulate
+from phpbbscrapy.pipelines import get_post_count_in_category, get_post_count_in_thread, get_category_from_db, remove_unwanted_query_parameters
+
+DEBUG_CATEGORY_ID = None
+DEBUG_THREAD_ID = None
+DEBUG_CHECK_POST_COUNT = False
 
 
+def get_filename_from_title(title):
+    if 'betrachtet' in title:
+        return re.sub(r' \([\d\.]+ [KiBGM]+\) .+betrachtet$', '', title)
+    elif 'Viewed' in title:
+        return re.sub(r' \([\d\.]+ [KiBGM]+\) Viewed \d+ times$', '', title) #
+    else:
+        title_chunks = title.split(' ')
+        first_chunk = title_chunks[0]
+        return first_chunk
 class PHPBBSpider(scrapy.Spider):
     name = 'phpBB'
     post_body_xpath = '//div[@class="postbody"]'
@@ -31,6 +45,9 @@ class PHPBBSpider(scrapy.Spider):
 
         engine = db_connect()
         self.session = sessionmaker(bind=engine)
+
+        self.images_found = 0
+        self.files_found = 0
 
     def after_login(self, response):
         text = response.text
@@ -61,8 +78,10 @@ class PHPBBSpider(scrapy.Spider):
             yield from self.parse_forums(response, None)
 
     def parse_forums(self, response, parent_category):
-        for forum_list in response.xpath('//ul[@class="topiclist forums"]'):
-            for forum in forum_list.xpath('li'):
+        topic_lists = response.xpath('//ul[@class="topiclist forums"]')
+        for forum_list in topic_lists:
+            topics = forum_list.xpath('li')
+            for forum in topics:
                 category = CategoryItem()
                 category['title'] = forum.xpath('.//div[@class="list-inner"]//a//text()').get()
                 category['url'] = response.urljoin(forum.xpath('.//div[@class="list-inner"]//a//@href').get())
@@ -81,7 +100,9 @@ class PHPBBSpider(scrapy.Spider):
                     tzinfo=pytz.UTC)
 
                 if parent_category:
-                    category['parent_id'] = parent_category['id']
+                    parent_category_in_db = get_category_from_db(self.session, self.name, parent_category['category_id'])
+                    if parent_category_in_db:
+                        category['parent_id'] = parent_category_in_db.id
                 else:
                     category['parent_id'] = None
 
@@ -90,11 +111,11 @@ class PHPBBSpider(scrapy.Spider):
                 database_post_count_in_category = get_post_count_in_category(self.session, self.name,
                                                                              category['category_id'])
 
-                if database_post_count_in_category == category['number_of_posts']:
+                if DEBUG_CHECK_POST_COUNT and database_post_count_in_category == category['number_of_posts']:
                     continue
 
-                # if category['category_id'] != 22:
-                #     continue
+                if DEBUG_CATEGORY_ID and category['category_id'] != DEBUG_CATEGORY_ID:
+                    continue
 
                 yield category
                 yield scrapy.Request(category['url'], callback=self.parse_threads,
@@ -106,7 +127,10 @@ class PHPBBSpider(scrapy.Spider):
         yield from self.parse_forums(response, category)
 
         for topic_list in response.xpath('//ul[@class="topiclist topics"]'):
-            for topic in topic_list.xpath('li[not(contains(@class, "global-announce"))]'):
+            topics = topic_list.xpath('li[not(contains(@class, "global-announce"))]')
+            topics = random.sample(topics, len(topics))
+
+            for topic in topics:
                 thread = ThreadItem()
                 thread['title'] = topic.xpath('.//a[@class="topictitle"]//text()').get()
                 thread['author'] = topic.xpath('dl//dt//div//div[contains(@class, "topic-post")]//a//text()').get()
@@ -135,13 +159,13 @@ class PHPBBSpider(scrapy.Spider):
                 thread_id = thread['thread_id']
                 database_post_count_in_thread = get_post_count_in_thread(self.session, category_from_db, thread_id)
 
-                if database_post_count_in_thread == thread['number_of_posts']:
+                if DEBUG_CHECK_POST_COUNT and database_post_count_in_thread == thread['number_of_posts']:
                     continue
 
-                # if thread['thread_id'] != 705:
-                #     continue
+                if DEBUG_THREAD_ID and thread['thread_id'] != DEBUG_THREAD_ID:
+                    continue
 
-                print(f"Processing new posts in thread {category['title']} > {thread['title']} ({thread['url']})")
+                # print(f"Processing new posts in thread {category['title']} > {thread['title']} ({thread['url']})")
                 yield thread
                 yield scrapy.Request(thread['url'], callback=self.parse_posts,
                                      meta={'category': category, 'thread': thread})
@@ -159,9 +183,14 @@ class PHPBBSpider(scrapy.Spider):
 
         pretty_table_data = []
 
+        images_in_thread = 0
+        files_in_thread = 0
+
         for post in posts:
             post_item = PostItem()
             post_text = post.xpath('.//div[@class="content"]').get()
+            post_attachbox = post.xpath('.//dl[@class="attachbox"]').get() or ''
+            post_text = '\n'.join([post_text, post_attachbox])
             post_item['content'] = self.clean_text(post_text)
             author = post.xpath(self.author_xpath)
             post_item['author'] = author.xpath(
@@ -181,7 +210,7 @@ class PHPBBSpider(scrapy.Spider):
 
             if not post_item.valid():
                 print('Post not valid')
-                raise CloseSpider('Post not valid')
+                continue
 
             # post_profile = post.xpath('./preceding-sibling::dl')
             # author_post_count = post_profile.xpath(self.post_count_xpath).get()
@@ -206,46 +235,91 @@ class PHPBBSpider(scrapy.Spider):
                     post_attachment['category_id'] = category['category_id']
                     post_attachment['url'] = response.urljoin(
                         post_href)  # https://forum.xentax.com/download/file.php?id=19118
-                    post_attachment['filename'] = post_link.xpath('./text()').get()
+
+                    download_id = re.match(".+id=(\d+)", post_attachment['url']).group(1)
+                    text = post_link.xpath('./text()').get()
+
+                    if text and re.match(r'.*\.\w{1,10}$', text):
+                        text = text.strip()
+                        post_attachment['filename'] = f"{download_id}_{text}"
+                    else:
+                        print(f"Could not find filename for {post_attachment['url']} in post {post_item['url']}")
+                        continue
 
                     # yield post_attachment
+                    # print(f"Found file {post_attachment['filename']} in post {post_item['url']}")
                     file_urls.append(post_attachment)
 
             for post_image in post_images:
                 image_src = post_image.xpath('./@src').get()
 
                 if image_src and 'download/file.php' in image_src:
+                    image_title = post_image.xpath('./@title').get()
+                    url = response.urljoin(image_src)
+                    alt = post_image.xpath('./@alt').get()
+
                     post_attachment = PostAttachmentItem()
                     post_attachment['board_name'] = self.name
                     post_attachment['post_id'] = post_item['post_id']
                     post_attachment['thread_id'] = thread['thread_id']
                     post_attachment['category_id'] = category['category_id']
-                    post_attachment['url'] = response.urljoin(image_src)
-                    post_attachment['filename'] = post_image.xpath('./@alt').get()
+                    post_attachment['url'] = url
+                    post_attachment['filename'] = alt
+                    download_id = re.match(".+id=(\d+)", post_attachment['url']).group(1)
 
-                    # yield post_attachment
+                    # WhatsApp Image 2023-01-08 at 20.30.39.jpeg (343.11 KiB) 353 mal betrachtet
+                    if image_title:
+                        image_title = get_filename_from_title(image_title)
+                        post_attachment['filename'] = f"{download_id}_{image_title}"
+                    elif alt and re.match(r'.+\.\w{1,10}$', alt):
+                        post_attachment['filename'] = f"{download_id}_{alt}"
+                    else:
+                        # if parent is dt
+                        parent = post_image.xpath('..')
+
+                        if parent and parent.xpath('name()').get() == 'dt' or parent.xpath('name()').get() == 'dd':
+                            last_dd = parent.xpath('../dd[last()]')
+                            if last_dd:
+                                text = last_dd.xpath('./text()').get()
+                                image_title = get_filename_from_title(text)
+                                post_attachment['filename'] = f"{download_id}_{image_title}"
+                            else:
+                                print(f"Could not find filename for {post_attachment['url']} in post {post_item['url']}")
+                                continue
+                        else:
+                            post_attachment['filename'] = f"{download_id}_no_extension_found"
+
+                    post_attachment['url'] = remove_unwanted_query_parameters(post_attachment['url'], ['t'])
+
                     image_urls.append(post_attachment)
 
             post_item['file_urls'] = file_urls
             post_item['image_urls'] = image_urls
 
-            # pretty_table_data.append([
-            #     post_item['author'],
-            #     post_item['category_id'],
-            #     post_item['thread_id'],
-            #     post_item['post_id'],
-            #     len(file_urls),
-            #     len(image_urls)
-            # ])
+            if len(file_urls) > 0:
+                self.files_found += len(file_urls)
+                files_in_thread += len(file_urls)
+            if len(image_urls) > 0:
+                self.images_found += len(image_urls)
+                images_in_thread += len(image_urls)
 
-            print(f"Found post {post_item['post_id']} by {post_item['author']} in thread {thread['thread_id']} in category {category['category_id']}")
+            pretty_table_data.append([
+                post_item['author'],
+                post_item['category_id'],
+                post_item['thread_id'],
+                post_item['post_id'],
+                len(file_urls),
+                len(image_urls)
+            ])
+
             yield post_item
+
+        print(f"Found {images_in_thread} images and {files_in_thread} files in {thread['title']} ({thread['url']}). Total images: {self.images_found}, total files: {self.files_found}")
 
         # print(tabulate(pretty_table_data, headers=['Author', 'Category', 'Thread', 'Post', 'Files', 'Images']))
         next_link = response.xpath('//li[@class="arrow next"]//a/@href').extract_first()
 
         if next_link:
-            print('Next link found')
             full_next_link = response.urljoin(next_link)
             yield scrapy.Request(full_next_link, callback=self.parse_posts,
                                  meta={'category': category, 'thread': thread})
@@ -260,13 +334,16 @@ class PHPBBSpider(scrapy.Spider):
 
     def clean_text(self, string):
         # CLEAN HTML TAGS FROM POST TEXT, MARK REPLIES TO QUOTES
-        tags = ['blockquote']
+        # tags = ['blockquote']
         soup = BeautifulSoup(string, 'lxml')
-        for tag in tags:
-            for i, item in enumerate(soup.find_all(tag)):
-                item.replaceWith('<reply-%s>=' % str(i + 1))
+        # for tag in tags:
+        #     for i, item in enumerate(soup.find_all(tag)):
+        #         item.replaceWith('<reply-%s>=' % str(i + 1))
 
-        soup_get_text = soup.get_text()
-        result_text = re.sub(r' +', r' ', soup_get_text).strip()
+        children = list(soup.html.body.children)
+        children_string = str(children).strip()
 
-        return str(list(soup.html.body.children)).strip()
+        # remove first and last characters (square brackets)
+        children_string = children_string[1:-1]
+
+        return children_string

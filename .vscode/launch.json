@@ -2,13 +2,24 @@
     "version": "0.1.0",
     "configurations": [
         {
-            "name": "Python: Launch Scrapy Spider",
+            "name": "zfx",
             "type": "python",
             "request": "launch",
             "module": "scrapy",
             "args": [
                 "runspider",
-                "${workspaceFolder}/phpbbscrapy/spiders/phpbb.py"
+                "${workspaceFolder}/phpbbscrapy/spiders/zfx.py"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "xentax",
+            "type": "python",
+            "request": "launch",
+            "module": "scrapy",
+            "args": [
+                "runspider",
+                "${workspaceFolder}/phpbbscrapy/spiders/xentax.py",
             ],
             "console": "integratedTerminal"
         }

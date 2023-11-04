@@ -1,3 +1,7 @@
+attachments
+images
+_cache
+cookies*
 __pycache__
 .venv
 .scrapy
@@ -5,3 +9,4 @@ phpbb.db
 .ideathumbnails
 .idea
 thumbnails
+*.log

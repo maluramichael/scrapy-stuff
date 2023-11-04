@@ -13,7 +13,7 @@ SPIDER_MODULES = ['phpbbscrapy.spiders']
 NEWSPIDER_MODULE = 'phpbbscrapy.spiders'
 
 # CONNECTION_STRING = 'sqlite:///phpbbscrapy.db'
-CONNECTION_STRING = 'mysql+pymysql://root:root@192.168.2.2:3306/scrapy_new'
+CONNECTION_STRING = 'mysql+pymysql://root:root@192.168.2.2:3306/xentax_new_new'
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
 USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:108.0) Gecko/20100101 Firefox/108.0'
@@ -91,10 +91,10 @@ ITEM_PIPELINES = {
 FILES_STORE = 'attachments'
 IMAGES_STORE = 'images'
 
-LOG_LEVEL = 'ERROR'
+LOG_LEVEL = 'INFO'
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/autothrottle.html
-DOWNLOAD_DELAY = 0.5
+DOWNLOAD_DELAY = 1
 AUTOTHROTTLE_ENABLED = False
 AUTOTHROTTLE_START_DELAY = 0
 AUTOTHROTTLE_TARGET_CONCURRENCY = 1

@@ -14,6 +14,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 import scrapy
 import pytz
+from urllib import parse
 
 from phpbbscrapy.items import PostItem, ThreadItem, CategoryItem, BoardItem, PostAttachmentItem
 from phpbbscrapy.models import create_table, db_connect, Category, Thread, Post, Board
@@ -96,7 +97,7 @@ class PostPipeline:
 
     def process_item(self, item, spider):
         if isinstance(item, PostItem):
-            self.store_db(item)
+            return self.store_db(item)
 
         return item
 
@@ -126,9 +127,10 @@ class PostPipeline:
                 item['thread_id'] = thread.id
 
                 session.add(Post(**item))
-                print("Added post with id: " + str(post_id))
                 session.commit()
                 session.close()
+
+                return item
             else:
                 session.close()
                 raise DropItem("Duplicate item found: %s" % item)
@@ -175,6 +177,7 @@ class MyImagesPipeline(ImagesPipeline):
         for attachment in item["image_urls"]:
             url = attachment['url']
             yield scrapy.Request(url)
+
     def file_path(self, request, response=None, info=None, *, item=None):
         image_urls = item["image_urls"]
         found_item = next((x for x in image_urls if x['url'] == request.url), None)
@@ -210,6 +213,19 @@ def get_category_from_db(sessionmaker, board_name, category_id):
 
         return found
 
+def remove_unwanted_query_parameters(url, unwanted_query_parameters):
+    split = parse.urlsplit(url)
+    query = split.query
+    parsed = parse.parse_qs(query)
+    parameters = dict(parsed)
+
+    for unwanted_query_parameter in unwanted_query_parameters:
+        if unwanted_query_parameter in parameters:
+            del parameters[unwanted_query_parameter]
+
+    query = parse.urlencode(parameters, doseq=True)
+    return parse.urlunsplit((split.scheme, split.netloc, split.path, query, split.fragment))
+
 
 class ThreadPipeline:
     def __init__(self) -> None:
@@ -222,7 +238,7 @@ class ThreadPipeline:
 
     def process_item(self, item, spider):
         if isinstance(item, ThreadItem):
-            self.store_db(item)
+            return self.store_db(item)
 
         return item
 
@@ -285,6 +301,11 @@ class CategoryPipeline:
 
         if not found:
             with self.session() as session:
+
+                # remove sid from url and keep everything elese
+                item["url"] = remove_unwanted_query_parameters(item["url"], ["sid"])
+
+
                 session.add(Category(**item))
                 session.commit()
                 session.close()
@@ -314,6 +335,10 @@ class CategoryPipeline:
 def get_post_count_in_category(sessionmaker, board_name, category_id):
     with sessionmaker() as session:
         category_in_db = session.query(Category).filter_by(category_id=category_id, board_name=board_name).first()
+
+        if not category_in_db:
+            return 0
+
         child_categories = session.query(Category).filter_by(parent_id=category_in_db.id, board_name=board_name)
         post_count_in_child_categories = 0
         for child_category in child_categories:
